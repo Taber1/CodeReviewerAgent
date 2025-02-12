@@ -1,43 +1,60 @@
 from dotenv import load_dotenv
-import os
-from agents.blueprint_extractor_agent import blueprint_extractor_agent
-from agents.code_analyzer_agent import code_analyzer_agent
-from tasks.extract_blueprint import extract_blueprint_task
-from tasks.analyze_code import analyze_code_task
 from crewai import Crew
-from tools.code_loader import load_codebase
+import os
+from llm_config import llm
 
-# Load environment variables
+# Load env first
 load_dotenv()
 
-# Gemini Flash 1.5 setup
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Configure LiteLLM for Gemini
+os.environ["LITELLM_MODEL"] = "gemini/gemini-1.5-flash-latest"
+os.environ["GEMINI_API_KEY"] = os.getenv("GEMINI_API_KEY")
 
 def main():
-    # Step 1: Load PDFs and codebase
-    pdf_directory = "../blueprints"  # Folder containing your PDFs
-    codebase_path = "C:\Users\Taber\Desktop\IMC"  # Folder containing your codebase
+    # Configuration
+    document_directory = "../blueprints"
+    codebase_path = r"E:\Projects\Final Project\VPI_IMC_Front"
+    
+    # Load data first
+    from tools.blueprint_loader import load_blueprint
+    from tools.code_loader import load_codebase
+    
+    blueprint_data = load_blueprint(document_directory)
+    codebase_data = load_codebase(codebase_path)
 
-    # Step 2: Create agents
-    blueprint_extractor_agent = blueprint_extractor_agent(llm=GEMINI_API_KEY)
-    code_analyzer_agent = code_analyzer_agent(llm=GEMINI_API_KEY)
+    # Initialize agents
+    from agents.blueprint_extractor_agent import blueprint_extractor_agent
+    from agents.code_analyzer_agent import code_analyzer_agent
+    blueprint_agent = blueprint_extractor_agent()
+    code_agent = code_analyzer_agent()
 
-    # Step 3: Create tasks
-    extract_blueprint_task = extract_blueprint_task(guideline_extractor_agent, pdf_directory)
-    analyze_codebase_task = analyze_code_task(code_analyzer_agent, "")
+    # Create tasks with explicit data
+    from tasks.extract_blueprint import extract_blueprint_task
+    from tasks.analyze_code import analyze_code_task
+    extraction_task = extract_blueprint_task(
+        agent=blueprint_agent,
+        document_directory=document_directory
+    )
+    
+    analysis_task = analyze_code_task(agent=code_agent)
+    analysis_task.context = [extraction_task]
 
-    # Step 4: Set up crew
+    # Configure crew with direct inputs
     crew = Crew(
-        agents=[blueprint_extractor_agent, code_analyzer_agent],
-        tasks=[extract_blueprint_task, analyze_codebase_task]
+        agents=[blueprint_agent, code_agent],
+        tasks=[extraction_task, analysis_task],
+        verbose=True,
+        manager_llm=llm
     )
 
-    # Step 5: Run the crew
-    analysis_result = crew.kickoff(inputs={"codebase": load_codebase(codebase_path)})
-
-    # Step 6: Output the issues
-    print("Codebase Analysis Results:")
-    print(analysis_result)
+    # Execute workflow with both inputs
+    result = crew.kickoff(inputs={
+        "codebase": codebase_data,
+        "blueprint_summary": blueprint_data
+    })
+    
+    print("\nFinal Analysis Report:")
+    print(result)
 
 if __name__ == "__main__":
     main()

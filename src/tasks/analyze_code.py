@@ -1,8 +1,10 @@
 from crewai import Task
 
-def analyze_code_task(agent, guidelines):
+def analyze_code_task(agent):
     return Task(
-        description=f"Analyze the following codebase and compare it against these guidelines: {guidelines}. Identify any violations or areas for improvement.",
-        expected_output="A list of code violations, including the filename, description of the issue, and suggested fixes.",
-        agent=agent
+        description="""Analyze codebase against extracted technical guidelines from blueprint documents.
+        Context: {blueprint_summary}""",
+        expected_output="List of code violations with file paths and specific fixes.",
+        agent=agent,
+        output_file="code_analysis_report.md"
     )
